@@ -1,0 +1,59 @@
+diff --git a/include/ftw.h b/include/ftw.h
+index b15c062a8389..5b07855fefcc 100644
+--- a/include/ftw.h
++++ b/include/ftw.h
+@@ -21,6 +21,14 @@ extern "C" {
+ #define FTW_CHDIR 4
+ #define FTW_DEPTH 8
+ 
++#ifdef _GNU_SOURCE
++#define FTW_ACTIONRETVAL 0x10
++#define FTW_CONTINUE 0
++#define FTW_STOP 1
++#define FTW_SKIP_SUBTREE 2
++#define FTW_SKIP_SIBLINGS 3
++#endif
++
+ struct FTW {
+ 	int base;
+ 	int level;
+diff --git a/src/misc/nftw.c b/src/misc/nftw.c
+index 8dcff7fefd2a..2994968dcbbe 100644
+--- a/src/misc/nftw.c
++++ b/src/misc/nftw.c
+@@ -8,6 +8,10 @@
+ #include <limits.h>
+ #include <pthread.h>
+ 
++#define FTW_ACTIONRETVAL 0x10
++#define FTW_SKIP_SUBTREE 2
++#define FTW_SKIP_SIBLINGS 3
++
+ struct history
+ {
+ 	struct history *chain;
+@@ -100,6 +104,12 @@ static int do_nftw(char *path, int (*fn)(const char *, const struct stat *, int,
+ 				path[j]='/';
+ 				strcpy(path+j+1, de->d_name);
+ 				if ((r=do_nftw(path, fn, fd_limit-1, flags, &new))) {
++					if (flags & FTW_ACTIONRETVAL) {
++						if (r == FTW_SKIP_SIBLINGS)
++							break;
++						if (r == FTW_SKIP_SUBTREE)
++							continue;
++					}
+ 					closedir(d);
+ 					return r;
+ 				}
+@@ -136,6 +146,9 @@ int nftw(const char *path, int (*fn)(const char *, const struct stat *, int, str
+ 	pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &cs);
+ 	r = do_nftw(pathbuf, fn, fd_limit, flags, NULL);
+ 	pthread_setcancelstate(cs, 0);
++	if ((flags & FTW_ACTIONRETVAL)
++	 && (r == FTW_SKIP_SIBLINGS || r == FTW_SKIP_SUBTREE))
++		r = 0;
+ 	return r;
+ }
+ 
+-- 
+2.30.2
